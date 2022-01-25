@@ -1,3 +1,4 @@
+from multiprocessing.dummy import Process
 import docx
 import numpy as np
 import os
@@ -15,7 +16,38 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from pythainlp.corpus import thai_stopwords
 from sklearn.decomposition import LatentDirichletAllocation as LDA
 
-
+class Preprocessor(object):
+    _instance = None
+    def __new__(cls):
+        if cls._instance is None:
+            print('Creating the object')
+            new_words = {''}
+            words = new_words.union(thai_words())
+            
+            vowels = ('”','“','”','_','!!','–','-','(',')','!','"')
+            stopword_set = frozenset(vowels)
+            
+            cls.TH_stopword = thai_stopwords().union(stopword_set)
+            cls.custom_dictionary_trie = dict_trie(words)
+            cls.p_stemmer = PorterStemmer()
+            
+            cls._instance = super(Preprocessor, cls).__new__(cls)
+            # Put any initialization here.
+        return cls._instance
+    def clean(cls, word):
+        dfTitle = word.strip('!()/\|}"’‘{_<>[]')
+        tokendfTitle = word_tokenize(normalize(dfTitle), custom_dict=cls.custom_dictionary_trie, keep_whitespace=False, engine="newmm")
+        Word_in_Title = [word for word in tokendfTitle if not word in cls.TH_stopword]
+        Word_in_Title = [cls.p_stemmer.stem(i)  for i in Word_in_Title]
+        return  ''.join(Word_in_Title)
+    
+    def word_preprocessing(cls, paragraphs):
+        doc = np.full(len(paragraphs), '', dtype='O')
+        for i, paragraph in enumerate(paragraphs):
+            paragraph_wt = word_tokenize(paragraph, keep_whitespace=False)
+            paragraph = [word for word in paragraph_wt if isthai(word)]
+            doc[i] = cls.clean("".join(paragraph))
+        return doc
 
 class Tfidf:
     '''
@@ -23,15 +55,18 @@ class Tfidf:
     '''
     def __init__(self, ngram_range=(2, 3), max_features=3000, min_df_factor=0.01) -> None:
         # self.stop_words = [t.encode('utf-8') for t in list(thai_stopwords())]
-        self.stop_words = frozenset(thai_stopwords())
+        # self.stop_words = frozenset(thai_stopwords())
         self.ngram_range = ngram_range
         self.max_features = max_features
         self.min_df_factor = min_df_factor
         self.datasets = None
+        self.p = Preprocessor()
         
     def text_tokenizer(self, text):
         # terms = [k.strip() for k in text.split(', ') if len(k.strip()) > 0 and k.strip() not in self.stop_words]
-        terms = [k.strip() for k in word_tokenize(text) if len(k.strip()) > 0 and k.strip() not in self.stop_words]
+        # terms = [k.strip() for k in word_tokenize(text) if len(k.strip()) > 0 and k.strip() not in self.stop_words]
+        terms = [k.strip() for k in word_tokenize(text) if len(k.strip()) > 0 and k.strip()]
+        
         return [t for t in terms if len(t) > 0 or t is not None]
 
     def text_processor(self, text: str) -> str:
@@ -46,6 +81,16 @@ class Tfidf:
         docx_path = glob(os.path.join(directory, '*.docx'))
         for fname in [*doc_path, *docx_path]:
             self.load_dataset(fname)
+            
+    @staticmethod
+    def word_preprocessing(paragraphs):
+        p = Preprocessor()
+        doc = np.full(len(paragraphs), '', dtype='O')
+        for i, paragraph in enumerate(paragraphs):
+            paragraph_wt = word_tokenize(paragraph, keep_whitespace=False)
+            paragraph = [word for word in paragraph_wt if isthai(word)]
+            doc[i] = p.clean("".join(paragraph))
+        return doc
     
     def load_dataset(self, fname, replace=False):
         file_format = fname.split('.')[-1].lower()
@@ -57,7 +102,7 @@ class Tfidf:
         for i, paragraph in enumerate(paragraphs):
             paragraph_wt = word_tokenize(paragraph, keep_whitespace=False)
             paragraph = [word for word in paragraph_wt if isthai(word)]
-            doc[i] = "".join(paragraph)
+            doc[i] = self.p.clean("".join(paragraph))
         if (self.datasets is None) or (replace is True):
             self.datasets = doc
         else:
@@ -71,10 +116,12 @@ class Tfidf:
             tokenizer=self.text_tokenizer,
             preprocessor=self.text_processor,
             ngram_range=self.ngram_range,
-            stop_words=self.stop_words,
+            # stop_words=self.stop_words,
             min_df=int(self.datasets.shape[0] * self.min_df_factor),
-            max_features=self.max_features
+            max_features=self.max_features,
+            token_pattern=None
         )
+        
         self.fit(self.datasets)
         
     def get_vectorizer(self):
@@ -158,6 +205,7 @@ class NotInitializedValue(Exception):
     pass
 
 if __name__ == '__main__':
+    
     tc = TextCategory()
     tag = tc.get_tag_from_index(2)
     print(tag)
