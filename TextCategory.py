@@ -5,7 +5,6 @@ import os
 from glob import glob
 import re
 
-from sklearn.decomposition import LatentDirichletAllocation
 from pythainlp import word_tokenize, Tokenizer, sent_tokenize
 from pythainlp.corpus.common import thai_words, provinces
 from pythainlp.tokenize import word_tokenize 
@@ -13,7 +12,7 @@ from pythainlp.corpus import thai_stopwords, get_corpus
 from pythainlp.util import dict_trie, normalize, isthai
 from nltk.stem.porter import PorterStemmer
 from pythainlp.corpus import thai_stopwords
-from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer
 from pythainlp.corpus import thai_stopwords
 from sklearn.decomposition import LatentDirichletAllocation as LDA
 
