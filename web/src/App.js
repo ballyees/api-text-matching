@@ -1,11 +1,11 @@
 import React, { useState } from "react";
-import { Container, Center, VStack, CircularProgress, CircularProgressLabel, useBoolean, Text, Box } from '@chakra-ui/react'
+import { Container, Center, VStack, StackDivider, CircularProgress, CircularProgressLabel, useBoolean, Text, Box } from '@chakra-ui/react'
 
 const regx = new RegExp(/.*base64,/);
 const url = 'http://127.0.0.1:8000/'
 const fileFormat = ['doc', 'docx', 'txt']
 export default function App() {
-  const [textResponse, setTextResponse] = useState('');
+  const [jsonResponse, setJsonResponse] = useState([]);
   const [loading, setLoading] = useBoolean()
 
   const showFile = (e) => {
@@ -18,13 +18,7 @@ export default function App() {
       const text = e.target.result;
       let format = window.fileName.split('.')[1]
       postFile(text.replace(regx, ''), format).then(json_data => {
-        let key = Object.keys(json_data)
-        let text = ''
-        for (let i in key) {
-          text += json_data[key[i]] + '\n|\n';
-        }
-        setTextResponse(text);
-        
+        setJsonResponse(json_data['response']);
         setLoading.off();
       })
     };
@@ -46,7 +40,9 @@ export default function App() {
               <CircularProgressLabel color='gray.600'>Loading</CircularProgressLabel>
             </CircularProgress>
             :
-            <Text>{textResponse}</Text>
+            <VStack divider={<StackDivider borderColor='gray.200' />}>
+              {jsonResponse.map((text, i) => <Box key={i}><Text>Topics {i}: {text}</Text></Box>)}
+            </VStack>
           }
           </Box>
         </Center>
@@ -54,6 +50,7 @@ export default function App() {
     </Container>
   )
 }
+
 
 async function postFile(data, format) {
   if(!search(format, fileFormat)){
