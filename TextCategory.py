@@ -35,7 +35,7 @@ class Preprocessor(object):
             # Put any initialization here.
         return cls._instance
     def clean(cls, word):
-        dfTitle = word.strip('!()/\|}"’‘{_<>[]')
+        dfTitle = word.strip('!()/\\|}"’‘{_<>[]')
         tokendfTitle = word_tokenize(normalize(dfTitle), custom_dict=cls.custom_dictionary_trie, keep_whitespace=False, engine="newmm")
         Word_in_Title = [word for word in tokendfTitle if not word in cls.TH_stopword]
         Word_in_Title = [cls.p_stemmer.stem(i)  for i in Word_in_Title]
@@ -183,7 +183,7 @@ class TextCategory:
         self.fit_with_tag(tag, corpus)
         topics_feature = self.vectorizers[tag].get_feature_names()
         top_topics_idx = np.fliplr(np.argsort(self.LDA[tag].components_))[..., :topn]
-        remove_space_func = np.vectorize(lambda s: re.sub('\s+', '', s))
+        remove_space_func = np.vectorize(lambda s: re.sub(r'\s+', '', s))
         topics = remove_space_func(topics_feature[top_topics_idx])
         # return topics
         return [', '.join(t) for t in topics]

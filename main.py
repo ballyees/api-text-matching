@@ -3,17 +3,16 @@ from sanic import Sanic
 from sanic_cors import CORS
 from sanic.response import json
 from docx import Document
-from .TextCategory import *
+from TextCategory import TextCategory
 from io import BytesIO
 import base64
 
 
+
 app = Sanic(__name__)
 CORS(app)
-
-# tc = TextCategory()
 # define model here
-
+tc = TextCategory()
 @app.route('/')
 async def test(request):
     return json({'hello': 'world'})
