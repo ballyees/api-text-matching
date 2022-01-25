@@ -189,6 +189,7 @@ class TextCategory:
         topics = remove_space_func(topics_feature[top_topics_idx])
         # return topics
         return [', '.join(t) for t in topics]
+    
     def get_tag_from_index(self, idx=0):
         return self.tags[idx]
     

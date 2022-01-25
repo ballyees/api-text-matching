@@ -4,6 +4,7 @@ from sanic.response import json
 from docx import Document
 from TextCategory import TextCategoryInstance, Preprocessor
 from io import BytesIO
+import numpy as np
 import base64
 
 
@@ -38,7 +39,9 @@ async def docx_reader(request):
     p = Preprocessor()
     corpus = p.word_preprocessing(paragraphs)
     topics = TextCategoryInstance.get_topics(corpus)
-    res = {'response': topics}
+    topics_unique = np.hstack([t.split(', ') for t in topics])
+    topics_unique = np.unique(topics_unique)
+    res = {'response': topics, 'unique': topics_unique.tolist()}
     return json(res)
 
 
@@ -49,3 +52,5 @@ if __name__ == '__main__':
         app.run(host=host, port=port, auto_reload=False, workers=10)
     except KeyboardInterrupt:
         exit(1)
+        # cmd command for kill all python process
+        # "taskkill /f /im "python.exe" /t"

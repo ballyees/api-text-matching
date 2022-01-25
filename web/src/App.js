@@ -18,6 +18,7 @@ export default function App() {
       const text = e.target.result;
       let format = window.fileName.split('.')[1]
       postFile(text.replace(regx, ''), format).then(json_data => {
+        console.log(json_data)
         setJsonResponse(json_data['response']);
         setLoading.off();
       })
@@ -33,19 +34,20 @@ export default function App() {
             <input type="file" onChange={showFile} />
           </Box>
         </Center>
-        <Center>
+        
           <Box borderRadius='md' color='black.700'>
           {(loading) ?
-            <CircularProgress isIndeterminate color='gray.900' size='200px' pt={5}>
-              <CircularProgressLabel color='gray.600'>Loading</CircularProgressLabel>
-            </CircularProgress>
+            <Center>
+              <CircularProgress isIndeterminate color='gray.900' size='200px' pt={5}>
+                <CircularProgressLabel color='gray.600'>Loading</CircularProgressLabel>
+              </CircularProgress>
+            </Center>
             :
-            <VStack divider={<StackDivider borderColor='gray.200' />}>
-              {jsonResponse.map((text, i) => <Box key={i}><Text>Topics {i}: {text}</Text></Box>)}
+            <VStack divider={<StackDivider borderColor='gray.200' />} alignItems="baseline">
+              {jsonResponse.map((text, i) => <Box key={i}><Text>Topics {i+1}: {text}</Text></Box>)}
             </VStack>
           }
           </Box>
-        </Center>
       </VStack>
     </Container>
   )
