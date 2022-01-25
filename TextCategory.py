@@ -132,23 +132,39 @@ class TextCategory:
         idf_transform = idf_vectorizer.fit_transform(corpus)
         return self.LDA[tag].fit_transform(idf_transform)
         
-    def get_topics(self, tag, corpus, topn=10):
+    def get_topics_with_tag(self, tag, corpus, topn=10):
         self.fit_with_tag(tag, corpus)
         topics_feature = self.vectorizers[tag].get_feature_names()
         top_topics_idx = np.fliplr(np.argsort(self.LDA[tag].components_))[..., :topn]
         remove_space_func = np.vectorize(lambda s: re.sub('\s+', '', s))
         topics = remove_space_func(topics_feature[top_topics_idx])
+        # return topics
         return [', '.join(t) for t in topics]
     def get_tag_from_index(self, idx=0):
         return self.tags[idx]
+    
+    def get_topics(self, corpus, topn=10):
+        tags_score = np.zeros(len(self.tags))
+        for i, tag in enumerate(self.tags):
+            # print(i, tag, type(corpus))
+            idf_score = self.vectorizers[tag].idf_(corpus)
+            tags_score[i] = np.sum(list(idf_score.values()))
+        tag = np.argmax(tags_score)
+        tag_name = self.tags[tag]
+        print(tag, tag_name)
+        print(tags_score)
+        return self.get_topics_with_tag(tag_name, corpus, topn)
 class NotInitializedValue(Exception):
     pass
 
 if __name__ == '__main__':
     tc = TextCategory()
-    tag = tc.get_tag_from_index(0)
-    corpus = tc.vectorizers[tag].datasets
+    tag = tc.get_tag_from_index(2)
     print(tag)
-    topics = tc.get_topics(tag, corpus)
-    print(topics)
+    print('------------'*5)
+    corpus = tc.vectorizers[tag].datasets
+    # print(corpus)
+    # print('------------'*5)
+    topics = tc.get_topics(corpus)
+    print(topics, len(topics))
     print('------------'*5)
