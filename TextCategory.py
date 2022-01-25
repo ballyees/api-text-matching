@@ -21,6 +21,9 @@ class Preprocessor(object):
     def __new__(cls):
         if cls._instance is None:
             print('Creating the object')
+            
+            cls._instance = super(Preprocessor, cls).__new__(cls)
+            # Put any initialization here.
             new_words = {''}
             words = new_words.union(thai_words())
             
@@ -30,9 +33,6 @@ class Preprocessor(object):
             cls.TH_stopword = thai_stopwords().union(stopword_set)
             cls.custom_dictionary_trie = dict_trie(words)
             cls.p_stemmer = PorterStemmer()
-            
-            cls._instance = super(Preprocessor, cls).__new__(cls)
-            # Put any initialization here.
         return cls._instance
     def clean(cls, word):
         dfTitle = word.strip('!()/\\|}"’‘{_<>[]')
@@ -79,6 +79,7 @@ class Tfidf:
     def load_dataset_from_directory(self, directory):
         doc_path = glob(os.path.join(directory, '*.doc'))
         docx_path = glob(os.path.join(directory, '*.docx'))
+        print(f'load dataset in directory: {directory}')
         for fname in [*doc_path, *docx_path]:
             self.load_dataset(fname)
             
@@ -155,6 +156,7 @@ class TextCategory:
         for pw in os.walk('LDA'):
             if len(pw[1]) == 0: # walk to datasets folder
                 tag = os.path.split(pw[0])[-1]
+                print(f'load dataset: {tag}')
                 idf = Tfidf()
                 idf.load_dataset_from_directory(pw[0])
                 idf.init_idf()
@@ -203,6 +205,8 @@ class TextCategory:
         return self.get_topics_with_tag(tag_name, corpus, topn)
 class NotInitializedValue(Exception):
     pass
+
+TextCategoryInstance = TextCategory()
 
 if __name__ == '__main__':
     

@@ -1,18 +1,15 @@
-from pydoc_data.topics import topics
 from sanic import Sanic
 from sanic_cors import CORS
 from sanic.response import json
 from docx import Document
-from TextCategory import TextCategory
+from TextCategory import TextCategoryInstance, Preprocessor
 from io import BytesIO
 import base64
-
 
 
 app = Sanic(__name__)
 CORS(app)
 # define model here
-tc = TextCategory()
 @app.route('/')
 async def test(request):
     return json({'hello': 'world'})
@@ -32,18 +29,23 @@ async def docx_reader(request):
     file = json_body['file']
     file = base64.b64decode(file)
     doc = Document(BytesIO(file))
-    res = {}
+    
     paragraphs = [p.text for p in doc.paragraphs]
-    for i, paragraph in enumerate(paragraphs):
-        res[f'p{i}'] = paragraph
+    # res = {}
+    # for i, paragraph in enumerate(paragraphs):
+    #     res[f'p{i}'] = paragraph
     # corpus = Tfidf.word_preprocessing(paragraphs)
-    # topics = tc.get_topics(corpus)
-    # topics = tc.get_topics(corpus)
-    # res = {'response': topics}
+    p = Preprocessor()
+    corpus = p.word_preprocessing(paragraphs)
+    topics = TextCategoryInstance.get_topics(corpus)
+    res = {'response': topics}
     return json(res)
 
 
 host = '127.0.0.1'
 port = 8000
 if __name__ == '__main__':
-    app.run(host=host, port=port, auto_reload=True)
+    try:
+        app.run(host=host, port=port, auto_reload=False, workers=10)
+    except KeyboardInterrupt:
+        exit(1)
