@@ -2,7 +2,8 @@ from sanic import Sanic
 from sanic_cors import CORS
 from sanic.response import json
 from docx import Document
-from TextCategory import TextCategoryInstance, Preprocessor
+from TextCategory import TextPreprocessor, TextCategory
+# from TextCategory import TextCategoryInstance, TextPreprocessor, TextCategory
 from io import BytesIO
 import numpy as np
 import base64
@@ -10,7 +11,10 @@ import base64
 
 app = Sanic(__name__)
 CORS(app)
+
 # define model here
+TextCategoryInstance = TextCategory()
+
 @app.route('/')
 async def test(request):
     return json({'hello': 'world'})
@@ -36,7 +40,7 @@ async def docx_reader(request):
     # for i, paragraph in enumerate(paragraphs):
     #     res[f'p{i}'] = paragraph
     # corpus = Tfidf.word_preprocessing(paragraphs)
-    p = Preprocessor()
+    p = TextPreprocessor()
     corpus = p.word_preprocessing(paragraphs)
     topics = TextCategoryInstance.get_topics(corpus)
     topics_unique = np.hstack([t.split(', ') for t in topics])

@@ -5,10 +5,10 @@ import os
 from glob import glob
 import re
 
-from pythainlp import word_tokenize, Tokenizer, sent_tokenize
-from pythainlp.corpus.common import thai_words, provinces
+from pythainlp import word_tokenize
+from pythainlp.corpus.common import thai_words
 from pythainlp.tokenize import word_tokenize 
-from pythainlp.corpus import thai_stopwords, get_corpus
+from pythainlp.corpus import thai_stopwords
 from pythainlp.util import dict_trie, normalize, isthai
 from nltk.stem.porter import PorterStemmer
 from pythainlp.corpus import thai_stopwords
@@ -16,13 +16,13 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from pythainlp.corpus import thai_stopwords
 from sklearn.decomposition import LatentDirichletAllocation as LDA
 
-class Preprocessor(object):
+class TextPreprocessor(object):
     _instance = None
     def __new__(cls):
         if cls._instance is None:
             print('Creating the object')
             
-            cls._instance = super(Preprocessor, cls).__new__(cls)
+            cls._instance = super(TextPreprocessor, cls).__new__(cls)
             # Put any initialization here.
             new_words = {''}
             words = new_words.union(thai_words())
@@ -34,7 +34,11 @@ class Preprocessor(object):
             cls.custom_dictionary_trie = dict_trie(words)
             cls.p_stemmer = PorterStemmer()
         return cls._instance
+
     def clean(cls, word):
+        '''
+        clean word with PorterStemmer
+        '''
         dfTitle = word.strip('!()/\\|}"’‘{_<>[]')
         tokendfTitle = word_tokenize(normalize(dfTitle), custom_dict=cls.custom_dictionary_trie, keep_whitespace=False, engine="newmm")
         Word_in_Title = [word for word in tokendfTitle if not word in cls.TH_stopword]
@@ -42,6 +46,9 @@ class Preprocessor(object):
         return  ''.join(Word_in_Title)
     
     def word_preprocessing(cls, paragraphs):
+        '''
+        word pre-processing for new document
+        '''
         doc = np.full(len(paragraphs), '', dtype='O')
         for i, paragraph in enumerate(paragraphs):
             paragraph_wt = word_tokenize(paragraph, keep_whitespace=False)
@@ -60,7 +67,7 @@ class Tfidf:
         self.max_features = max_features
         self.min_df_factor = min_df_factor
         self.datasets = None
-        self.p = Preprocessor()
+        self.p = TextPreprocessor()
         
     def text_tokenizer(self, text):
         # terms = [k.strip() for k in text.split(', ') if len(k.strip()) > 0 and k.strip() not in self.stop_words]
@@ -85,7 +92,7 @@ class Tfidf:
             
     @staticmethod
     def word_preprocessing(paragraphs):
-        p = Preprocessor()
+        p = TextPreprocessor()
         doc = np.full(len(paragraphs), '', dtype='O')
         for i, paragraph in enumerate(paragraphs):
             paragraph_wt = word_tokenize(paragraph, keep_whitespace=False)
@@ -94,15 +101,21 @@ class Tfidf:
         return doc
     
     def load_dataset(self, fname, replace=False):
+        # get file format
         file_format = fname.split('.')[-1].lower()
         if file_format not in ['doc', 'docx']:
             raise NotImplementedError(f'format [{file_format}]: not support')
+        # load documet
         docx_file = docx.Document(fname)
         paragraphs = [paragraph.text for paragraph in docx_file.paragraphs]
+        # initial array of string object (corpus) assume 1 paragraph is document
         doc = np.full(len(paragraphs), '', dtype='O')
         for i, paragraph in enumerate(paragraphs):
+            # tokenize word on paragraph
             paragraph_wt = word_tokenize(paragraph, keep_whitespace=False)
+            # cut word if not thai word
             paragraph = [word for word in paragraph_wt if isthai(word)]
+            # final clean tokenize word and concatenate word
             doc[i] = self.p.clean("".join(paragraph))
         if (self.datasets is None) or (replace is True):
             self.datasets = doc
@@ -112,7 +125,7 @@ class Tfidf:
     def init_idf(self):
         if self.datasets is None:
             raise NotInitializedValue('please call load_dataset')
-        
+        # initial tfidf
         self.tfidf_vectorizer = TfidfVectorizer(
             tokenizer=self.text_tokenizer,
             preprocessor=self.text_processor,
@@ -122,26 +135,39 @@ class Tfidf:
             max_features=self.max_features,
             token_pattern=None
         )
-        
+        # fit the dataset
         self.fit(self.datasets)
         
     def get_vectorizer(self):
         return self.tfidf_vectorizer
     
     def fit(self, corpus):
+        # overide method fit on TfidfVectorizer
         self.tfidf_vectorizer.fit(corpus)
         
     def transform(self, corpus):
+        # overide method transform on TfidfVectorizer
         return self.tfidf_vectorizer.transform(corpus)
         
     def fit_transform(self, corpus):
+        # overide method fit_transform on TfidfVectorizer
         self.fit(corpus)
         return self.transform(corpus)
     
     def get_feature_names(self):
+        # overide method get_feature_names on TfidfVectorizer
         return np.array(self.tfidf_vectorizer.get_feature_names())
     
     def idf_(self, corpus=None, topn=20):
+        """get idf word and score
+
+        Args:
+            corpus ([None], np.ndarray): corpus of document. Defaults to None.
+            topn (int): maximum idf sequence. Defaults to 20.
+
+        Returns:
+            dict: word is key and idf score is value
+        """        
         if corpus is None:
             corpus = self.datasets
         corpus_idf = self.transform(corpus).toarray()
@@ -156,12 +182,14 @@ class TextCategory:
         for pw in os.walk('LDA'):
             if len(pw[1]) == 0: # walk to datasets folder
                 tag = os.path.split(pw[0])[-1]
-                print(f'load dataset: {tag}')
+                print(f'initial tag : {tag}')
+                # create Tfidf for every tag on dataset
                 idf = Tfidf()
                 idf.load_dataset_from_directory(pw[0])
                 idf.init_idf()
                 self.vectorizers[tag] = idf
                 idf_transform = idf.transform(idf.datasets)
+                # create LDA for every tag on dataset
                 self.LDA[tag] = LDA(n_components=5, learning_decay=0.5, n_jobs=-1, random_state=1234)
                 self.LDA[tag].fit(idf_transform)
         self.tags = list(self.LDA.keys())
@@ -182,6 +210,15 @@ class TextCategory:
         return self.LDA[tag].fit_transform(idf_transform)
         
     def get_topics_with_tag(self, tag, corpus, topn=10):
+        """get LDA topic from tag with probability based on Tfidf
+        Args:
+            tag (str): document tag
+            corpus (np.ndarray of unicode): corpus of document
+            topn (int): maximum topics sequence. Defaults to 10.
+
+        Returns:
+            [np.ndarray]: topics 
+        """        
         self.fit_with_tag(tag, corpus)
         topics_feature = self.vectorizers[tag].get_feature_names()
         top_topics_idx = np.fliplr(np.argsort(self.LDA[tag].components_))[..., :topn]
@@ -194,9 +231,16 @@ class TextCategory:
         return self.tags[idx]
     
     def get_topics(self, corpus, topn=10):
+        """get LDA topic from unknown tag with probability based on Tfidf
+        Args:
+            corpus (np.ndarray of unicode): corpus of document
+            topn (int): maximum topics sequence. Defaults to 10.
+
+        Returns:
+            [np.ndarray]: topics 
+        """        
         tags_score = np.zeros(len(self.tags))
         for i, tag in enumerate(self.tags):
-            # print(i, tag, type(corpus))
             idf_score = self.vectorizers[tag].idf_(corpus)
             tags_score[i] = np.sum(list(idf_score.values()))
         tag = np.argmax(tags_score)
@@ -207,8 +251,6 @@ class TextCategory:
 class NotInitializedValue(Exception):
     pass
 
-TextCategoryInstance = TextCategory()
-
 if __name__ == '__main__':
     
     tc = TextCategory()
@@ -216,8 +258,9 @@ if __name__ == '__main__':
     print(tag)
     print('------------'*5)
     corpus = tc.vectorizers[tag].datasets
+    print(tc.LDA[tag].get_params())
     # print(corpus)
     # print('------------'*5)
-    topics = tc.get_topics(corpus)
-    print(topics, len(topics))
-    print('------------'*5)
+    # topics = tc.get_topics(corpus)
+    # print(topics, len(topics))
+    # print('------------'*5)
