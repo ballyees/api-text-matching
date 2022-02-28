@@ -42,7 +42,7 @@ async def docx_reader(request):
     # corpus = Tfidf.word_preprocessing(paragraphs)
     p = TextPreprocessor()
     corpus = p.word_preprocessing(paragraphs)
-    topics = TextCategoryInstance.get_topics(corpus)
+    topics = TextCategoryInstance.get_topics(corpus, 8)
     topics_unique = np.hstack([t.split(', ') for t in topics])
     topics_unique = np.unique(topics_unique)
     res = {'response': topics, 'unique': topics_unique.tolist()}

@@ -4,6 +4,8 @@ import numpy as np
 import os
 from glob import glob
 import re
+import pandas as pd
+from helper import edit_distance
 
 from pythainlp import word_tokenize
 from pythainlp.corpus.common import thai_words
@@ -15,6 +17,7 @@ from pythainlp.corpus import thai_stopwords
 from sklearn.feature_extraction.text import TfidfVectorizer
 from pythainlp.corpus import thai_stopwords
 from sklearn.decomposition import LatentDirichletAllocation as LDA
+from collections import Counter
 
 class TextPreprocessor(object):
     _instance = None
@@ -82,13 +85,6 @@ class Tfidf:
         omit = dict(zip(omit_key, omit_value))
         
         return ' '.join([t.strip() for t in text.translate(omit).split("\n") ])
-    
-    def load_dataset_from_directory(self, directory):
-        doc_path = glob(os.path.join(directory, '*.doc'))
-        docx_path = glob(os.path.join(directory, '*.docx'))
-        print(f'load dataset in directory: {directory}')
-        for fname in [*doc_path, *docx_path]:
-            self.load_dataset(fname)
             
     @staticmethod
     def word_preprocessing(paragraphs):
@@ -103,11 +99,11 @@ class Tfidf:
     def load_dataset(self, fname, replace=False):
         # get file format
         file_format = fname.split('.')[-1].lower()
-        if file_format not in ['doc', 'docx']:
+        if file_format not in ['csv']:
             raise NotImplementedError(f'format [{file_format}]: not support')
         # load documet
-        docx_file = docx.Document(fname)
-        paragraphs = [paragraph.text for paragraph in docx_file.paragraphs]
+        df = pd.read_csv(fname, sep='|')
+        paragraphs = df['Summary'].tolist()
         # initial array of string object (corpus) assume 1 paragraph is document
         doc = np.full(len(paragraphs), '', dtype='O')
         for i, paragraph in enumerate(paragraphs):
@@ -126,12 +122,14 @@ class Tfidf:
         if self.datasets is None:
             raise NotInitializedValue('please call load_dataset')
         # initial tfidf
+        # print(int(self.datasets.shape[0] * self.min_df_factor))
         self.tfidf_vectorizer = TfidfVectorizer(
             tokenizer=self.text_tokenizer,
             preprocessor=self.text_processor,
             ngram_range=self.ngram_range,
             # stop_words=self.stop_words,
-            min_df=int(self.datasets.shape[0] * self.min_df_factor),
+            # min_df=int(self.datasets.shape[0] * self.min_df_factor),
+            # min_df= 2 ,
             max_features=self.max_features,
             token_pattern=None
         )
@@ -177,58 +175,27 @@ class Tfidf:
 
 class TextCategory:
     def __init__(self) -> None:
-        self.vectorizers = {}
-        self.LDA = {}
-        for pw in os.walk('LDA'):
-            if len(pw[1]) == 0: # walk to datasets folder
-                tag = os.path.split(pw[0])[-1]
-                print(f'initial tag : {tag}')
-                # create Tfidf for every tag on dataset
-                idf = Tfidf()
-                idf.load_dataset_from_directory(pw[0])
-                idf.init_idf()
-                self.vectorizers[tag] = idf
-                idf_transform = idf.transform(idf.datasets)
-                # create LDA for every tag on dataset
-                self.LDA[tag] = LDA(n_components=5, learning_decay=0.5, n_jobs=-1, random_state=1234)
-                self.LDA[tag].fit(idf_transform)
-        self.tags = list(self.LDA.keys())
+        idf = Tfidf()
+        idf.load_dataset('dataLDA_01.csv')
+        idf.init_idf()
+        self.vectorizer = idf
+        idf_transform = idf.transform(idf.datasets)
+        # create LDA for every tag on dataset
+        self.LDA = LDA(n_components=5, learning_decay=0.5, n_jobs=-1, random_state=1234)
+        self.LDA.fit(idf_transform)
+        self.unique_keyword = pd.read_csv('unique_keyword.csv')['unique'].to_numpy()
         
-    def fit_with_tag(self, tag, corpus):
-        idf_vectorizer = self.vectorizers[tag]
-        idf_transform = idf_vectorizer.fit_transform(corpus)
-        self.LDA[tag].fit(idf_transform)
+    def fit_with_tag(self, corpus):
+        idf_transform = self.vectorizer.fit_transform(corpus)
+        self.LDA.fit(idf_transform)
         
-    def transform_with_tag(self, tag, corpus):
-        idf_vectorizer = self.vectorizers[tag]
-        idf_transform = idf_vectorizer.transform(corpus)
-        return self.LDA[tag].transform(idf_transform)
+    def transform_with_tag(self, corpus):
+        idf_transform = self.vectorizer.transform(corpus)
+        return self.LDA.transform(idf_transform)
     
-    def fit_transform_with_tag(self, tag, corpus):
-        idf_vectorizer = self.vectorizers[tag]
-        idf_transform = idf_vectorizer.fit_transform(corpus)
-        return self.LDA[tag].fit_transform(idf_transform)
-        
-    def get_topics_with_tag(self, tag, corpus, topn=10):
-        """get LDA topic from tag with probability based on Tfidf
-        Args:
-            tag (str): document tag
-            corpus (np.ndarray of unicode): corpus of document
-            topn (int): maximum topics sequence. Defaults to 10.
-
-        Returns:
-            [np.ndarray]: topics 
-        """        
-        self.fit_with_tag(tag, corpus)
-        topics_feature = self.vectorizers[tag].get_feature_names()
-        top_topics_idx = np.fliplr(np.argsort(self.LDA[tag].components_))[..., :topn]
-        remove_space_func = np.vectorize(lambda s: re.sub(r'\s+', '', s))
-        topics = remove_space_func(topics_feature[top_topics_idx])
-        # return topics
-        return [', '.join(t) for t in topics]
-    
-    def get_tag_from_index(self, idx=0):
-        return self.tags[idx]
+    def fit_transform_with_tag(self, corpus):
+        idf_transform = self.vectorizer.fit_transform(corpus)
+        return self.LDA.fit_transform(idf_transform)
     
     def get_topics(self, corpus, topn=10):
         """get LDA topic from unknown tag with probability based on Tfidf
@@ -239,28 +206,68 @@ class TextCategory:
         Returns:
             [np.ndarray]: topics 
         """        
-        tags_score = np.zeros(len(self.tags))
-        for i, tag in enumerate(self.tags):
-            idf_score = self.vectorizers[tag].idf_(corpus)
-            tags_score[i] = np.sum(list(idf_score.values()))
-        tag = np.argmax(tags_score)
-        tag_name = self.tags[tag]
-        print(tag, tag_name)
-        print(tags_score)
-        return self.get_topics_with_tag(tag_name, corpus, topn)
+        corpus = [*filter(lambda c: c != '', corpus)]
+        idf_transform = self.vectorizer.fit_transform(corpus)
+        self.LDA.fit(idf_transform)
+        topics_feature = self.vectorizer.get_feature_names()
+        top_topics_idx = np.fliplr(np.argsort(self.LDA.components_))[..., :topn]
+        remove_space_func = np.vectorize(lambda s: re.sub(r'\s+', '', s))
+        lda = []
+        topics = []
+        is_first = True
+        for values, idx in zip(self.LDA.components_, top_topics_idx):
+            tmp = []
+            # sum_prob = np.sum(values[idx])
+            for i, s in zip(idx, topics_feature[idx]):
+                s = re.sub(r'\s+', '', s)
+                # tmp.append(f'{s} [{values[i]/sum_prob:.3f}]')
+                if is_first is True:
+                    topics.append(s)
+                tmp.append(f'{s} [{values[i]:.3f}]')
+            lda.append(', '.join(tmp))
+            is_first = False
+        print(topics)
+            # lda.append(dict(zip(topics_feature[idx], values[idx])))
+        print('--------------------'*10)
+        # lda = list(zip(topics_feature[top_topics_idx], self.LDA[tag_name].components_[..., top_topics_idx]))
+        # for (key, value) in lda:
+        topics_in_keyword = []
+        for t in topics:
+            isin_unique = np.vectorize(lambda s: t[:3] in s)
+            word_idx = isin_unique(self.unique_keyword)
+            word = self.unique_keyword[word_idx]
+            if word.shape[0] != 0:
+                if t in word:
+                    topics_in_keyword.append(t)
+                else:
+                    distance = edit_distance(word, t)
+                    idx = np.argmin(distance)
+                    topics_in_keyword.append(word[idx])
+                    print(distance)
+            else:
+                distance = edit_distance(self.unique_keyword, t)
+                # print(distance)
+                idx = np.argmin(distance)
+                topics_in_keyword.append(self.unique_keyword[idx])
+        # print('--------------------'*10)
+        # print(lda)
+        print('------------'*10)
+        # print(topics_in_keyword)
+        return lda
+        # topics = remove_space_func(topics_feature[top_topics_idx])
+        # return self.get_topics_with_tag(tag_name, corpus, topn)
+
 class NotInitializedValue(Exception):
     pass
 
 if __name__ == '__main__':
     
     tc = TextCategory()
-    tag = tc.get_tag_from_index(2)
-    print(tag)
     print('------------'*5)
-    corpus = tc.vectorizers[tag].datasets
-    print(tc.LDA[tag].get_params())
+    corpus = tc.vectorizer.datasets
+    # print(tc.LDA.get_params())
     # print(corpus)
     # print('------------'*5)
-    # topics = tc.get_topics(corpus)
+    topics = tc.get_topics(corpus)
     # print(topics, len(topics))
     # print('------------'*5)

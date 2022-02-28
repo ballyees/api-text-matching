@@ -1,4 +1,4 @@
 #!/bin/bash
 
-conda activate sanicAPI
+conda activate base
 sh run_web.sh 1 & python main.py
